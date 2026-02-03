@@ -29,7 +29,7 @@ class static_analysis:
                     # phi=metadata['sample']['orientation']['Phi'] #Identify the coordinate of the axis scan and add to the coordinates.
             
                     # self.phis.append(phi) 
-                    # self.tilt[str(i-fst)]['Phi']=metadata['sample']['orientation']['Phi']
+                    # self.tilt[str(i-fst)]['Phi']=metadata['sample']['position']['Phi']
                 
         # return self.data
             
@@ -52,6 +52,7 @@ class static_analysis:
     
         coords = {}
         dims = []
+        metadata = self.build_metadata_from_ibw(bw)
     
         for i in range(ndim):
             n = nDim[i]
@@ -64,6 +65,14 @@ class static_analysis:
             dims.append(dim_name)
             coords[dim_name] = coord
     
+        coords['X'] = metadata['sample']['position']['X']
+        coords['Y'] = metadata['sample']['position']['Y']
+        coords['Z'] = metadata['sample']['position']['Z']
+        coords['Phi'] = metadata['sample']['position']['Phi']
+        coords['Theta'] = metadata['sample']['position']['Theta']
+        coords['Omega'] = metadata['sample']['position']['Omega']
+        
+        
         self.data = xr.DataArray(
             data,
             dims=dims,
@@ -234,13 +243,9 @@ class static_analysis:
             'X': note.get('X'),
             'Y': note.get('Y'),
             'Z': note.get('Z'),
-        }
-    
-        # Orientation
-        metadata['sample']['orientation'] = {
             'Theta': note.get('Theta'),
             'Phi': note.get('Phi'),
-            'Omega': note.get('Omega'),
+            'Omega': note.get('Omega')
         }
     
         # ======================
@@ -282,10 +287,10 @@ class static_analysis:
             
             data = binarywave.load(datapath + f"WSe2_{i:03d}.ibw")
             metadata = self.build_metadata_from_ibw(data)
-            phi=metadata['sample']['orientation']['Phi']
+            phi=metadata['sample']['position']['Phi']
             
             self.phis.append(phi) 
-            self.tilt[str(i-fst)]['Phi']=metadata['sample']['orientation']['Phi']
+            self.tilt[str(i-fst)]['Phi']=metadata['sample']['position']['Phi']
 
     
     def combine_tilts(self):
