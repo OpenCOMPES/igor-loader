@@ -1,0 +1,1 @@
+from .helpers import static_analysis

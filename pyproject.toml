@@ -1,7 +1,8 @@
 [build-system]
 requires = ["setuptools>=64.0.1", "setuptools-scm[toml]>=6.2"]
 build-backend = "setuptools.build_meta"
-
+[tool.setuptools]
+package-dir = {"" = "src"}
 [tool.setuptools.packages.find]
 where = [
     "src",
@@ -10,7 +11,7 @@ where = [
 [tool.setuptools_scm]
 
 [project]
-name = "Igor-loader"
+name = "igor_loader"
 dynamic = ["version"]
 description = "A set of tools for loading and converting photoemission data"
 authors = [
@@ -38,8 +39,7 @@ dependencies = [
 ]
 
 [project.urls]
-repository = "https://github.com/OpenCOMPES/Igor-loader"
-documentation = 
+repository = "https://github.com/OpenCOMPES/igor-loader"
 
 [project.optional-dependencies]
 dev = [
