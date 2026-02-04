@@ -17,6 +17,7 @@ class static_analysis:
         else:
             if len(files)==1:
                 self.data = self.ibw_to_xarray(files[0])
+                self.edit()
             else:
                 self.axis={}
                 for i, file in enumerate(files):
