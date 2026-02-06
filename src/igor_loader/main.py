@@ -6,12 +6,14 @@ import ipywidgets as widgets
 from ipywidgets import interact
 from IPython.display import display
 from pathlib import Path
+import pathlib
 from .metadata import build_metadata_from_ibw
 from .helpers import ibw_to_xarray
+# from .helpers import to_nexus
 
 class static_analysis:
     
-    def load(self,path_ibw,name,run):
+    def load(self,path_ibw,name,run, scan_dim="int"):
         path = Path(path_ibw)
         files = sorted(path.glob(f"{name}{run:03d}*.ibw"))
         if len(files)==0:
@@ -20,52 +22,69 @@ class static_analysis:
             if len(files)==1:
                 self.data = ibw_to_xarray(files[0])
                 self.edit()
+                self.result=self.data
             else:
-                self.axis={}
+                self.result={}
                 for i, file in enumerate(files):
                     self.data=ibw_to_xarray(file)
                     self.edit()
-                    self.axis[str(i+1)] = self.data
+                    self.result[str(i+1)] = self.data
+        
+                scans = []
+                scan_indices = []
 
-    def load_old(self,path_ibw):
+                for i, key in enumerate(sorted(self.result.keys(), key=int)):
+                    da = self.result[key]
+
+                    # Make the X, Phi etc become coords of combined array
+                    da = da.expand_dims({scan_dim: [i]})
+
+                    scans.append(da)
+                    scan_indices.append(i)
+
+                self.stacked = xr.concat(scans, dim=scan_dim)
+    
+    
+    
+    # def load_old(self,path_ibw):
                 
-        bw = binarywave.load(path_ibw)
+    #     bw = binarywave.load(path_ibw)
 
-        wave = bw["wave"]
-        header = wave["wave_header"]
-        data = wave["wData"]
+    #     wave = bw["wave"]
+    #     header = wave["wave_header"]
+    #     data = wave["wData"]
 
-        ndim = data.ndim
+    #     ndim = data.ndim
 
-        sfA = header["sfA"]
-        sfB = header["sfB"]
-        nDim = header["nDim"]
+    #     sfA = header["sfA"]
+    #     sfB = header["sfB"]
+    #     nDim = header["nDim"]
 
-        coords = {}
-        dims = []
+    #     coords = {}
+    #     dims = []
 
-        for i in range(ndim):
-            n = nDim[i]
-            start = sfB[i]
-            delta = sfA[i]
+    #     for i in range(ndim):
+    #         n = nDim[i]
+    #         start = sfB[i]
+    #         delta = sfA[i]
 
-            coord = start + delta * np.arange(n)
+    #         coord = start + delta * np.arange(n)
 
-            dim_name = f"dim_{i}"
-            dims.append(dim_name)
-            coords[dim_name] = coord
+    #         dim_name = f"dim_{i}"
+    #         dims.append(dim_name)
+    #         coords[dim_name] = coord
 
-        self.data = xr.DataArray(
-            data,
-            dims=dims,
-            coords=coords,
-            name=header["bname"].decode("ascii"),
-            attrs={
-                "note": wave["note"].decode("latin1", errors="ignore")
-            }
-        )
+    #     self.data = xr.DataArray(
+    #         data,
+    #         dims=dims,
+    #         coords=coords,
+    #         name=header["bname"].decode("ascii"),
+    #         attrs={
+    #             "note": wave["note"].decode("latin1", errors="ignore")
+    #         }
+    #     )
 
-        return self.data  
+    #     return self.data  
     
 
     def edit(self,new_dims=None):
@@ -77,158 +96,188 @@ class static_analysis:
         # return self.data.rename(dict(zip(self.data.dims, new_dims)))
       
     
-    def load_tilt_old(self,datapath,fst,last):
-        self.tilt = {}
-        self.phis=[]
+    # def load_tilt_old(self,datapath,fst,last):
+    #     self.tilt = {}
+    #     self.phis=[]
         
-        for i in range(fst, last):
-            self.load_old(datapath + f"WSe2_{i:03d}.ibw")
-            self.edit()
-            self.tilt[str(i-fst)] = self.data
+    #     for i in range(fst, last):
+    #         self.load_old(datapath + f"WSe2_{i:03d}.ibw")
+    #         self.edit()
+    #         self.tilt[str(i-fst)] = self.data
             
-            data = binarywave.load(datapath + f"WSe2_{i:03d}.ibw")
-            metadata = build_metadata_from_ibw(data)
-            phi=metadata['sample']['position']['Phi']
+    #         data = binarywave.load(datapath + f"WSe2_{i:03d}.ibw")
+    #         metadata = build_metadata_from_ibw(data)
+    #         phi=metadata['sample']['position']['Phi']
             
-            self.phis.append(phi) 
-            self.tilt[str(i-fst)]['Phi']=metadata['sample']['position']['Phi']
+    #         self.phis.append(phi) 
+    #         self.tilt[str(i-fst)]['Phi']=metadata['sample']['position']['Phi']
 
+    # def combine_scans(self):
+    #     """
+    #     tilt : dict-like (ex: tilt["0"], tilt["1"], ...)
+    #     phis : array-like com os valores de Phi
+    #     scan_range : iterable (ex: range(0, 21))
+    #     """
+    #     scans = [self.axis[str(i)] for i in range(1,len(self.axis))]
+    #     coords=[self.axis[str(i)].coords for i in range(1,len(self.axis))]
+    #     stacked = xr.concat(
+    #         scans,dim=xr.DataArray(coords)
+    #     )
     
-    def combine_tilts(self):
-        """
-        tilt : dict-like (ex: tilt["0"], tilt["1"], ...)
-        phis : array-like com os valores de Phi
-        scan_range : iterable (ex: range(0, 21))
-        """
-        scans = [self.tilt[str(i)] for i in range(0,len(self.tilt))]
+    #     return stacked
     
-        stacked = xr.concat(
-            scans,
-            dim=xr.DataArray(self.phis, dims="scan", name="Phi")
-        )
+    # def combine_scans(self, scan_dim="int"):
+    #     scans = []
+    #     scan_indices = []
+
+    #     for i, key in enumerate(sorted(self.axis.keys(), key=int)):
+    #         da = self.axis[key]
+
+    #         # Make the X, Phi etc become coords of combined array
+    #         da = da.expand_dims({scan_dim: [i]})
+
+    #         scans.append(da)
+    #         scan_indices.append(i)
+
+    #     combined = xr.concat(scans, dim=scan_dim)
+
+    #     return combined
+
+    # def combine_tilts(self):
+    #     """
+    #     tilt : dict-like (ex: tilt["0"], tilt["1"], ...)
+    #     phis : array-like com os valores de Phi
+    #     scan_range : iterable (ex: range(0, 21))
+    #     """
+    #     scans = [self.tilt[str(i)] for i in range(0,len(self.tilt))]
     
-        stacked = stacked.set_index(scan="Phi")
-        stacked = stacked.rename(scan="Phi")
+    #     stacked = xr.concat(
+    #         scans,
+    #         dim=xr.DataArray(self.phis, dims="scan", name="Phi")
+    #     )
     
-        return stacked
+    #     stacked = stacked.set_index(scan="Phi")
+    #     stacked = stacked.rename(scan="Phi")
     
-    def tilt_map(self,stacked):
+    #     return stacked
     
-        phi_vals = stacked.coords["Phi"].values
-        ang_vals = stacked.coords["Angular"].values
-        energy_vals = stacked.coords["Energy"].values
+    # def tilt_map(self,stacked):
     
-        def update(Energy=1, dE=0.5, Phi=0, dPhi=0, Angular=0, dang=0):
+    #     phi_vals = stacked.coords["Phi"].values
+    #     ang_vals = stacked.coords["Angular"].values
+    #     energy_vals = stacked.coords["Energy"].values
     
-            # ---------- Dados ----------
-            data_main = stacked.sel(
-                Energy=slice(Energy - dE, Energy + dE)
-            ).mean(dim="Energy")
+    #     def update(Energy=1, dE=0.5, Phi=0, dPhi=0, Angular=0, dang=0):
     
-            data_phi = stacked.sel(
-                Phi=slice(Phi - dPhi, Phi + dPhi)
-            ).mean(dim="Phi")
+    #         # ---------- Dados ----------
+    #         data_main = stacked.sel(
+    #             Energy=slice(Energy - dE, Energy + dE)
+    #         ).mean(dim="Energy")
     
-            data_ang = stacked.sel(
-                Angular=slice(Angular - dang, Angular + dang)
-            ).mean(dim="Angular")
+    #         data_phi = stacked.sel(
+    #             Phi=slice(Phi - dPhi, Phi + dPhi)
+    #         ).mean(dim="Phi")
     
-            # ---------- Figura ----------
-            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+    #         data_ang = stacked.sel(
+    #             Angular=slice(Angular - dang, Angular + dang)
+    #         ).mean(dim="Angular")
     
-            # --- Mapa principal (Phi x Angular) ---
-            im0 = axes[0].imshow(
-                data_main,
-                aspect="auto",
-                origin="lower",
-                cmap="viridis",
-                extent=[
-                    ang_vals.min(), ang_vals.max(),
-                    phi_vals.min(), phi_vals.max()
-                ]
-            )
+    #         # ---------- Figura ----------
+    #         fig, axes = plt.subplots(1, 3, figsize=(18, 5))
     
-            axes[0].axhspan(Phi - dPhi, Phi + dPhi, color="r", alpha=0.2)
-            axes[0].axvspan(Angular - dang, Angular + dang, color="b", alpha=0.2)
+    #         # --- Mapa principal (Phi x Angular) ---
+    #         im0 = axes[0].imshow(
+    #             data_main,
+    #             aspect="auto",
+    #             origin="lower",
+    #             cmap="viridis",
+    #             extent=[
+    #                 ang_vals.min(), ang_vals.max(),
+    #                 phi_vals.min(), phi_vals.max()
+    #             ]
+    #         )
     
-            axes[0].set_xlabel("Angular")
-            axes[0].set_ylabel("Phi")
-            axes[0].set_title(f"Energy ∈ [{Energy-dE:.2f}, {Energy+dE:.2f}]")
-            fig.colorbar(im0, ax=axes[0])
+    #         axes[0].axhspan(Phi - dPhi, Phi + dPhi, color="r", alpha=0.2)
+    #         axes[0].axvspan(Angular - dang, Angular + dang, color="b", alpha=0.2)
     
-            # --- Corte Phi fixo (Energy x Angular) ---
-            im1 = axes[1].imshow(
-                data_phi,
-                aspect="auto",
-                origin="lower",
-                cmap="viridis",
-                extent=[
-                    ang_vals.min(), ang_vals.max(),
-                    energy_vals.min(), energy_vals.max()
-                ]
-            )
-            axes[1].set_xlabel("Angular")
-            axes[1].set_ylabel("Energy")
-            axes[1].set_title(f"Phi = {Phi:.2f}")
-            fig.colorbar(im1, ax=axes[1])
+    #         axes[0].set_xlabel("Angular")
+    #         axes[0].set_ylabel("Phi")
+    #         axes[0].set_title(f"Energy ∈ [{Energy-dE:.2f}, {Energy+dE:.2f}]")
+    #         fig.colorbar(im0, ax=axes[0])
     
-            # --- Corte Angular fixo (Energy x Phi) ---
-            im2 = axes[2].imshow(
-                data_ang,
-                aspect="auto",
-                origin="lower",
-                cmap="viridis",
-                extent=[
-                    phi_vals.min(), phi_vals.max(),
-                    energy_vals.min(), energy_vals.max()
-                ]
-            )
-            axes[2].set_xlabel("Phi")
-            axes[2].set_ylabel("Energy")
-            axes[2].set_title(f"Angular = {Angular:.2f}")
-            fig.colorbar(im2, ax=axes[2])
+    #         # --- Corte Phi fixo (Energy x Angular) ---
+    #         im1 = axes[1].imshow(
+    #             data_phi,
+    #             aspect="auto",
+    #             origin="lower",
+    #             cmap="viridis",
+    #             extent=[
+    #                 ang_vals.min(), ang_vals.max(),
+    #                 energy_vals.min(), energy_vals.max()
+    #             ]
+    #         )
+    #         axes[1].set_xlabel("Angular")
+    #         axes[1].set_ylabel("Energy")
+    #         axes[1].set_title(f"Phi = {Phi:.2f}")
+    #         fig.colorbar(im1, ax=axes[1])
     
-            plt.tight_layout()
-            plt.show()
+    #         # --- Corte Angular fixo (Energy x Phi) ---
+    #         im2 = axes[2].imshow(
+    #             data_ang,
+    #             aspect="auto",
+    #             origin="lower",
+    #             cmap="viridis",
+    #             extent=[
+    #                 phi_vals.min(), phi_vals.max(),
+    #                 energy_vals.min(), energy_vals.max()
+    #             ]
+    #         )
+    #         axes[2].set_xlabel("Phi")
+    #         axes[2].set_ylabel("Energy")
+    #         axes[2].set_title(f"Angular = {Angular:.2f}")
+    #         fig.colorbar(im2, ax=axes[2])
     
-        # ---------- Sliders ----------
-        Energy_slider = widgets.FloatSlider(
-            value=energy_vals.mean(),
-            min=energy_vals.min(),
-            max=energy_vals.max(),
-            step=np.diff(energy_vals).mean(),
-            description='Energy'
-        )
+    #         plt.tight_layout()
+    #         plt.show()
     
-        dE_slider = widgets.FloatSlider(value=0.5, min=0.1, max=2, step=0.1, description='dE')
-        dPhi_slider = widgets.FloatSlider(value=1, min=0.1, max=5, step=1, description='dPhi')
-        dang_slider = widgets.FloatSlider(value=1, min=1, max=10, step=1, description='dang')
+    #     # ---------- Sliders ----------
+    #     Energy_slider = widgets.FloatSlider(
+    #         value=energy_vals.mean(),
+    #         min=energy_vals.min(),
+    #         max=energy_vals.max(),
+    #         step=np.diff(energy_vals).mean(),
+    #         description='Energy'
+    #     )
     
-        Phi_slider = widgets.FloatSlider(
-            value=phi_vals[len(phi_vals)//2],
-            min=phi_vals.min(),
-            max=phi_vals.max(),
-            step=np.diff(phi_vals).mean(),
-            description='Phi'
-        )
+    #     dE_slider = widgets.FloatSlider(value=0.5, min=0.1, max=2, step=0.1, description='dE')
+    #     dPhi_slider = widgets.FloatSlider(value=1, min=0.1, max=5, step=1, description='dPhi')
+    #     dang_slider = widgets.FloatSlider(value=1, min=1, max=10, step=1, description='dang')
     
-        Angular_slider = widgets.FloatSlider(
-            value=ang_vals[len(ang_vals)//2],
-            min=ang_vals.min(),
-            max=ang_vals.max(),
-            step=np.diff(ang_vals).mean(),
-            description='Angular'
-        )
+    #     Phi_slider = widgets.FloatSlider(
+    #         value=phi_vals[len(phi_vals)//2],
+    #         min=phi_vals.min(),
+    #         max=phi_vals.max(),
+    #         step=np.diff(phi_vals).mean(),
+    #         description='Phi'
+    #     )
     
-        interact(
-            update,
-            Energy=Energy_slider,
-            dE=dE_slider,
-            dPhi=dPhi_slider,
-            dang=dang_slider,
-            Phi=Phi_slider,
-            Angular=Angular_slider
-        )
+    #     Angular_slider = widgets.FloatSlider(
+    #         value=ang_vals[len(ang_vals)//2],
+    #         min=ang_vals.min(),
+    #         max=ang_vals.max(),
+    #         step=np.diff(ang_vals).mean(),
+    #         description='Angular'
+    #     )
+    
+    #     interact(
+    #         update,
+    #         Energy=Energy_slider,
+    #         dE=dE_slider,
+    #         dPhi=dPhi_slider,
+    #         dang=dang_slider,
+    #         Phi=Phi_slider,
+    #         Angular=Angular_slider
+    #     )
 
     def edc(self):
         data = self.data
@@ -311,3 +360,202 @@ class static_analysis:
         )
 
         display(ui, out)
+       
+       
+       
+    def tilt_map(self):
+
+        self.stacked=self.stacked.swap_dims({"int": "Phi"})
+        phi_vals = self.stacked.coords["Phi"].values
+        ang_vals = self.stacked.coords["Angular"].values
+        energy_vals = self.stacked.coords["Energy"].values
+        
+
+        def update(Energy=1, dE=0.5, Phi=0, dPhi=0, Angular=0, dang=0):
+
+            # ---------- Dados ----------
+            data_main = self.stacked.sel(
+                Energy=slice(Energy - dE, Energy + dE)
+            ).mean(dim="Energy")
+
+            data_phi = self.stacked.sel(
+                Phi=slice(Phi - dPhi, Phi + dPhi)
+            ).mean(dim="Phi")
+
+            data_ang = self.stacked.sel(
+                Angular=slice(Angular - dang, Angular + dang)
+            ).mean(dim="Angular")
+
+            # ---------- Figura ----------
+            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+            # --- Mapa principal (Phi x Angular) ---
+            im0 = axes[0].imshow(
+                data_main,
+                aspect="auto",
+                origin="lower",
+                cmap="viridis",
+                extent=[
+                    ang_vals.min(), ang_vals.max(),
+                    phi_vals.min(), phi_vals.max()
+                ]
+            )
+
+            axes[0].axhspan(Phi - dPhi, Phi + dPhi, color="r", alpha=0.2)
+            axes[0].axvspan(Angular - dang, Angular + dang, color="b", alpha=0.2)
+
+            axes[0].set_xlabel("Angular")
+            axes[0].set_ylabel("Phi")
+            axes[0].set_title(f"Energy ∈ [{Energy-dE:.2f}, {Energy+dE:.2f}]")
+            fig.colorbar(im0, ax=axes[0])
+
+            # --- Corte Phi fixo (Energy x Angular) ---
+            im1 = axes[1].imshow(
+                data_phi,
+                aspect="auto",
+                origin="lower",
+                cmap="viridis",
+                extent=[
+                    ang_vals.min(), ang_vals.max(),
+                    energy_vals.min(), energy_vals.max()
+                ]
+            )
+            axes[1].set_xlabel("Angular")
+            axes[1].set_ylabel("Energy")
+            axes[1].set_title(f"Phi = {Phi:.2f}")
+            fig.colorbar(im1, ax=axes[1])
+
+            # --- Corte Angular fixo (Energy x Phi) ---
+            im2 = axes[2].imshow(
+                data_ang,
+                aspect="auto",
+                origin="lower",
+                cmap="viridis",
+                extent=[
+                    phi_vals.min(), phi_vals.max(),
+                    energy_vals.min(), energy_vals.max()
+                ]
+            )
+            axes[2].set_xlabel("Phi")
+            axes[2].set_ylabel("Energy")
+            axes[2].set_title(f"Angular = {Angular:.2f}")
+            fig.colorbar(im2, ax=axes[2])
+
+            plt.tight_layout()
+            plt.show()
+
+        # ---------- Sliders ----------
+        Energy_slider = widgets.FloatSlider(
+            value=energy_vals.mean(),
+            min=energy_vals.min(),
+            max=energy_vals.max(),
+            step=np.diff(energy_vals).mean(),
+            description='Energy'
+        )
+
+        dE_slider = widgets.FloatSlider(value=0.5, min=0.1, max=2, step=0.1, description='dE')
+        dPhi_slider = widgets.FloatSlider(value=1, min=0.1, max=5, step=1, description='dPhi')
+        dang_slider = widgets.FloatSlider(value=1, min=1, max=10, step=1, description='dang')
+
+        Phi_slider = widgets.FloatSlider(
+            value=phi_vals[len(phi_vals)//2],
+            min=phi_vals.min(),
+            max=phi_vals.max(),
+            step=np.diff(phi_vals).mean(),
+            description='Phi'
+        )
+
+        Angular_slider = widgets.FloatSlider(
+            value=ang_vals[len(ang_vals)//2],
+            min=ang_vals.min(),
+            max=ang_vals.max(),
+            step=np.diff(ang_vals).mean(),
+            description='Angular'
+        )
+
+        interact(
+            update,
+            Energy=Energy_slider,
+            dE=dE_slider,
+            dPhi=dPhi_slider,
+            dang=dang_slider,
+            Phi=Phi_slider,
+            Angular=Angular_slider
+        )
+
+    # def save(
+    #         self,
+    #         faddr: str,
+    #         **kwds,
+    #     ):
+    #         """Saves the loaded data to the provided path and filename.
+
+    #         Args:
+    #             faddr (str): Path and name of the file to write. Its extension determines
+    #                 the file type to write. Valid file types are:
+
+    #                 - "*.tiff", "*.tif": Saves a TIFF stack.
+    #                 - "*.h5", "*.hdf5": Saves an HDF5 file.
+    #                 - "*.nxs", "*.nexus": Saves a NeXus file.
+
+    #             **kwds: Keyword arguments, which are passed to the writer functions:
+    #                 For TIFF writing:
+
+    #                 - **alias_dict**: Dictionary of dimension aliases to use.
+
+    #                 For HDF5 writing:
+
+    #                 - **mode**: hdf5 read/write mode. Defaults to "w".
+
+    #                 For NeXus:
+
+    #                 - **reader**: Name of the pynxtools reader to use.
+    #                 Defaults to config["nexus"]["reader"]
+    #                 - **definition**: NeXus application definition to use for saving.
+    #                 Must be supported by the used ``reader``. Defaults to
+    #                 config["nexus"]["definition"]
+    #                 - **input_files**: A list of input files to pass to the reader.
+    #                 Defaults to config["nexus"]["input_files"]
+    #                 - **eln_data**: Path to a json file with data from an electronic lab notebook.
+    #                 Its is appended to the ``input_files``.
+    #         """
+    #         if self.result is None:
+    #             raise NameError("Need to load data first!")
+
+    #         extension = pathlib.Path(faddr).suffix
+
+    #         if extension in (".tif", ".tiff"):
+    #             to_tiff(
+    #                 data=self.result,
+    #                 faddr=faddr,
+    #                 **kwds,
+    #             )
+    #         elif extension in (".h5", ".hdf5"):
+    #             to_h5(
+    #                 data=self.result,
+    #                 faddr=faddr,
+    #                 **kwds,
+    #             )
+    #         elif extension in (".nxs", ".nexus"):
+    #             reader = 'mpes'
+    #             definition = "NXmpes"
+    #             input_files = ["/mnt/pcshare/specsscan/NXmpes_arpes_config.json"]
+    #             if isinstance(input_files, str):
+    #                 input_files = [input_files]
+
+    #             if "eln_data" in kwds:
+    #                 input_files.append(kwds.pop("eln_data"))
+
+    #             to_nexus(
+    #                 data=self.result,
+    #                 faddr=faddr,
+    #                 reader=reader,
+    #                 definition=definition,
+    #                 input_files=input_files,
+    #                 **kwds,
+    #             )
+
+    #         else:
+    #             raise NotImplementedError(
+    #                 f"Unrecognized file format: {extension}.",
+    #             )   
