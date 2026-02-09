@@ -559,3 +559,126 @@ class static_analysis:
     #             raise NotImplementedError(
     #                 f"Unrecognized file format: {extension}.",
     #             )   
+    def Chunk_3D(self):
+
+        coords_int = [
+            name for name, coord in self.stacked.coords.items()
+            if "int" in coord.dims
+            ]
+
+        self.stacked=self.stacked.swap_dims({"int": coords_int[1]})
+        coord_vals = self.stacked.coords[coords_int[1]].values
+        ang_vals = self.stacked.coords["Angular"].values
+        energy_vals = self.stacked.coords["Energy"].values
+        
+
+        def update(Energy=1, dz=0.5, Scan_dir=0, dy=0, Angular=0, dx=0):
+
+            # ---------- Dados ----------
+            data_main = self.stacked.sel(
+                Energy=slice(Energy - dz, Energy + dz)
+            ).mean(dim="Energy")
+
+            data_scan = self.stacked.sel(
+                {coords_int[1]: slice(Scan_dir - dy, Scan_dir + dy)}).mean(dim=coords_int[1])
+
+            data_ang = self.stacked.sel(
+                Angular=slice(Angular - dx, Angular + dx)
+            ).mean(dim="Angular")
+
+            # ---------- Figura ----------
+            fig, axes = plt.subplots(1, 3, figsize=(18, 5))
+
+            # --- Mapa principal (Phi x Angular) ---
+            im0 = axes[0].imshow(
+                data_main,
+                aspect="auto",
+                origin="lower",
+                cmap="viridis",
+                extent=[
+                    ang_vals.min(), ang_vals.max(),
+                    coord_vals.min(), coord_vals.max()
+                ]
+            )
+
+            axes[0].axhspan(Scan_dir - dy, Scan_dir + dy, color="r", alpha=0.2)
+            axes[0].axvspan(Angular - dx, Angular + dx, color="b", alpha=0.2)
+
+            axes[0].set_xlabel("Angular")
+            axes[0].set_ylabel(coords_int[1])
+            axes[0].set_title(f"Energy ∈ [{Energy-dz:.2f}, {Energy+dz:.2f}]")
+            fig.colorbar(im0, ax=axes[0])
+
+            # --- Corte Phi fixo (Energy x Angular) ---
+            im1 = axes[1].imshow(
+                data_scan,
+                aspect="auto",
+                origin="lower",
+                cmap="viridis",
+                extent=[
+                    ang_vals.min(), ang_vals.max(),
+                    energy_vals.min(), energy_vals.max()
+                ]
+            )
+            axes[1].set_xlabel("Angular")
+            axes[1].set_ylabel("Energy")
+            axes[1].set_title(f"{coords_int[1]} = {Scan_dir:.2f}")
+            fig.colorbar(im1, ax=axes[1])
+
+            # --- Corte Angular fixo (Energy x Phi) ---
+            im2 = axes[2].imshow(
+                data_ang,
+                aspect="auto",
+                origin="lower",
+                cmap="viridis",
+                extent=[
+                    coord_vals.min(), coord_vals.max(),
+                    energy_vals.min(), energy_vals.max()
+                ]
+            )
+            axes[2].set_xlabel(coords_int[1])
+            axes[2].set_ylabel("Energy")
+            axes[2].set_title(f"Angular = {Angular:.2f}")
+            fig.colorbar(im2, ax=axes[2])
+
+            plt.tight_layout()
+            plt.show()
+
+        # ---------- Sliders ----------
+        Energy_slider = widgets.FloatSlider(
+            value=energy_vals.mean(),
+            min=energy_vals.min(),
+            max=energy_vals.max(),
+            step=np.diff(energy_vals).mean(),
+            description='Energy'
+        )
+
+        dz_slider = widgets.FloatSlider(value=0.5, min=0.1, max=2, step=0.1, description='dz')
+        dy_slider = widgets.FloatSlider(value=coord_vals[1]-coord_vals[0], min=(coord_vals[1]-coord_vals[0])/2, max=(coord_vals[1]-coord_vals[0])*3, step=coord_vals[1]-coord_vals[0], description='dy')
+        dx_slider = widgets.FloatSlider(value=1, min=1, max=10, step=1, description='dx')
+
+        Scan_dir_slider = widgets.FloatSlider(
+            value=coord_vals[len(coord_vals)//2],
+            min=coord_vals.min(),
+            max=coord_vals.max(),
+            step=np.diff(coord_vals).mean(),
+            description=coords_int[1]
+        )
+
+        Angular_slider = widgets.FloatSlider(
+            value=ang_vals[len(ang_vals)//2],
+            min=ang_vals.min(),
+            max=ang_vals.max(),
+            step=np.diff(ang_vals).mean(),
+            description='Angular'
+        )
+
+        interact(
+            update,
+            Energy=Energy_slider,
+            dz=dz_slider,
+            dy=dy_slider,
+            dx=dx_slider,
+            Scan_dir=Scan_dir_slider,
+            Angular=Angular_slider
+        )
