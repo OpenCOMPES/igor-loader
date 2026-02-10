@@ -1,1 +1,1 @@
-from .helpers import static_analysis
+from .main import static_analysis
